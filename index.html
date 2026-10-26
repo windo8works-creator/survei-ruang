@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex, nofollow">
+<title>Survei ruang</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --ink: #121214;
+    --panel: #1c1c1f;
+    --panel-2: #26262a;
+    --line: #34343a;
+    --brass: #c5a880;
+    --brass-dim: #8f7b5c;
+    --text: #f0f0f2;
+    --muted: #9a9aa2;
+    --warn: #e0a33a;
+    --bad: #e0675a;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--ink); color: var(--text); font-family: var(--font); }
+  body { font-size: 15px; line-height: 1.35; padding: 12px 12px calc(124px + env(safe-area-inset-bottom)); max-width: 480px; margin: 0 auto; }
+  button, input { font: inherit; color: inherit; }
+  button { touch-action: manipulation; user-select: none; -webkit-user-select: none; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .top { display: grid; grid-template-columns: 1fr 96px; gap: 8px; }
+  .field { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-height: 56px; display: flex; flex-direction: column; justify-content: center; text-align: left; }
+  .field small { color: var(--muted); font-size: 12px; }
+  .field b { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .field input { background: transparent; border: 0; padding: 2px 0 0; font-size: 17px; width: 100%; outline: none; }
+  .field input::placeholder { color: #5f5f66; }
+
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 0; }
+  .tab { min-height: 46px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 14px; }
+  .tab[aria-pressed="true"] { border-color: var(--brass); color: var(--brass); background: #1f1c17; }
+
+  .plan { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 10px; margin-bottom: 10px; }
+  .plan svg { width: 100%; height: 150px; display: block; }
+  .plan .empty { height: 150px; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 0 20px; }
+  .status { margin: 4px 4px 0; font-size: 13px; color: var(--muted); min-height: 18px; }
+  .status.ok { color: var(--brass); }
+  .status.warn { color: var(--warn); }
+  .status.bad { color: var(--bad); }
+
+  .cells { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; }
+  .cells.three { grid-template-columns: repeat(3, 1fr); }
+  .cell { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-height: 60px; text-align: left; }
+  .cell small { display: block; color: var(--muted); font-size: 12px; }
+  .cell b { display: block; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 30px; }
+  .cell[aria-pressed="true"] { border-color: var(--brass); background: #1f1c17; }
+  .cell.invalid b { color: var(--bad); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; min-height: 8px; }
+  .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .dpad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+  .dir { min-height: 54px; border-radius: 10px; border: 1px solid var(--brass-dim); background: #1f1c17; color: var(--brass); font-size: 15px; }
+  .undo { width: 100%; min-height: 44px; margin-bottom: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+  .key { min-height: 56px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); font-size: 24px; font-variant-numeric: tabular-nums; }
+  .key:active { background: #34343a; }
+  .key.wide { grid-column: 1 / -1; min-height: 48px; font-size: 15px; color: var(--brass); border-color: var(--brass-dim); background: #1f1c17; }
+
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+  summary { min-height: 48px; display: flex; align-items: center; padding: 0 12px; cursor: pointer; font-size: 15px; }
+  details > div { padding: 0 12px 12px; }
+  .row-label { color: var(--muted); font-size: 13px; margin: 8px 0 4px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--ink); border-top: 1px solid var(--line); }
+  .bar-inner { max-width: 480px; margin: 0 auto; }
+  .msg { min-height: 20px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .msg.bad { color: var(--bad); }
+  .msg.ok { color: var(--brass); }
+  .go { width: 100%; min-height: 56px; border-radius: 12px; border: 0; background: var(--brass); color: #1a1710; font-size: 17px; font-weight: 600; }
+  .go[aria-disabled="true"] { background: var(--panel-2); color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <label class="field"><small>Nama ruang</small>
+    <input id="nama" type="text" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="Ruang tamu" aria-label="Nama ruang"></label>
+  <button class="field" id="tinggiCell" type="button" aria-pressed="false"><small>Tinggi (m)</small><b id="tinggiVal" class="num">3</b></button>
+</div>
+
+<div class="tabs" role="group" aria-label="Mode ukur">
+  <button class="tab" type="button" data-mode="kotak" aria-pressed="true">Kotak siku</button>
+  <button class="tab" type="button" data-mode="keliling" aria-pressed="false">Leter-L / U</button>
+  <button class="tab" type="button" data-mode="miring" aria-pressed="false">Miring</button>
+</div>
+
+<div class="plan">
+  <div id="plan"></div>
+  <div class="status" id="status" aria-live="polite"></div>
+</div>
+
+<div id="fields"></div>
+
+<div class="pad" id="pad"></div>
+
+<details id="bukaan">
+  <summary>Pintu, jendela, kolom</summary>
+  <div>
+    <div class="row-label">Pintu: jumlah, lebar, tinggi (m)</div>
+    <div class="cells three" data-group="pintu"></div>
+    <div class="row-label">Jendela: jumlah, lebar, tinggi (m)</div>
+    <div class="cells three" data-group="jendela"></div>
+    <div class="row-label">Kolom menonjol: jumlah, lebar, tebal (m)</div>
+    <div class="cells three" data-group="kolom"></div>
+    <p class="hint">Satu ukuran per jenis. Kosongkan semua isian kalau tidak ada.</p>
+  </div>
+</details>
+
+<details id="lanjutan">
+  <summary>Lanjutan</summary>
+  <div>
+    <label class="field" style="margin-bottom:8px"><small>Proyek (opsional)</small>
+      <input id="proyek" type="text" maxlength="40" autocomplete="off" placeholder="RUMAH-CONTOH" aria-label="Proyek"></label>
+    <div class="row-label">Dinding lengkung (hanya mode kotak): bentang, tinggi perut (m)</div>
+    <div class="cells" data-group="lengkung"></div>
+    <label class="field" style="margin-top:8px"><small>Alasan paksa (hanya bila celah di atas 50 mm sudah dicek)</small>
+      <input id="paksa" type="text" maxlength="120" autocomplete="off" placeholder="sudah diukur ulang di lapangan" aria-label="Alasan paksa"></label>
+  </div>
+</details>
+
+<div class="bar">
+  <div class="bar-inner">
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+    <button class="go" id="go" type="button" aria-disabled="true">Proses CAD &amp; QTO</button>
+  </div>
+</div>
+
+<script id="logic">
+/* Logika murni (tanpa DOM): aturan harus sama dengan survei_bot_daemon.py */
+(function (root) {
+  'use strict';
+  var R = {
+    tinggi: [1.5, 15], p: [0.3, 100], l: [0.3, 100], seg: [0.05, 100], sisi: [0.3, 100],
+    diag: [0.3, 200], chord: [0.3, 50], sagitta: [0.02, 25], qty: [1, 50],
+    bw: [0.05, 10], bh: [0.05, 10], kw: [0.05, 5], kt: [0.05, 5]
+  };
+  var SEG_MIN = 4, SEG_MAX = 60, MAX_BYTES = 4096;
+  var NUM_RE = /^\d{1,3}(\.\d{1,3})?$/;
+  var QTY_RE = /^\d{1,2}$/;
+  var NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,39}$/;
+  var PAKSA_RE = /^[A-Za-z0-9][A-Za-z0-9 ,._()\/:-]{4,119}$/;
+  var DIRS = { U: [0, 1], T: [1, 0], S: [0, -1], B: [-1, 0] };
+  var GAP_WARN = 10, GAP_REJECT = 50, GAP_OPEN = 500;
+
+  function parse(s) { return NUM_RE.test(s || '') ? Number(s) : NaN; }
+  function parseQty(s) { return QTY_RE.test(s || '') ? Number(s) : NaN; }
+  function inRange(v, r) { return isFinite(v) && v >= r[0] && v <= r[1]; }
+  function fmt(n) { return String(Number(n.toFixed(3))); }
+  function g(state, id) { return (state.vals && state.vals[id]) || ''; }
+
+  function geometry(state) {
+    var m = state.mode, pts, labels;
+    if (m === 'kotak') {
+      var p = parse(g(state, 'kotak.p')), l = parse(g(state, 'kotak.l'));
+      if (!inRange(p, R.p) || !inRange(l, R.l)) return { pts: null };
+      return { pts: [[0, 0], [0, l], [p, l], [p, 0]], closed: true, labels: [l, p, l, p], gap: 0 };
+    }
+    if (m === 'keliling') {
+      pts = [[0, 0]]; labels = [];
+      (state.segs || []).forEach(function (s) {
+        var d = parse(s.v), v = DIRS[s.d];
+        if (!(d > 0) || !v) return;
+        var last = pts[pts.length - 1];
+        pts.push([last[0] + v[0] * d, last[1] + v[1] * d]);
+        labels.push(d);
+      });
+      if (pts.length < 2) return { pts: null };
+      var e = pts[pts.length - 1];
+      return { pts: pts, closed: false, labels: labels, gap: Math.hypot(e[0] - pts[0][0], e[1] - pts[0][1]) };
+    }
+    var A = parse(g(state, 'miring.A')), B = parse(g(state, 'miring.B')), C = parse(g(state, 'miring.C')),
+        D = parse(g(state, 'miring.D')), dg = parse(g(state, 'miring.diag'));
+    if (![A, B, C, D, dg].every(function (x) { return x > 0; })) return { pts: null };
+    var y3 = (dg * dg + A * A - B * B) / (2 * A), x2 = dg * dg - y3 * y3;
+    if (x2 < -1e-9) return { pts: null, error: 'Diagonal tidak cocok dengan sisi A dan B.' };
+    var x3 = Math.sqrt(Math.max(0, x2));
+    var cb = (dg * dg + D * D - C * C) / (2 * dg * D);
+    if (cb < -1 || cb > 1) return { pts: null, error: 'Sisi C dan D tidak cocok dengan diagonal.' };
+    var th4 = Math.atan2(y3, x3) - Math.acos(cb);
+    return { pts: [[0, 0], [0, A], [x3, y3], [D * Math.cos(th4), D * Math.sin(th4)]],
+             closed: true, labels: [A, B, C, D], gap: 0 };
+  }
+
+  function area(pts) {
+    var s = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var a = pts[i], b = pts[(i + 1) % pts.length];
+      s += a[0] * b[1] - b[0] * a[1];
+    }
+    return Math.abs(s) / 2;
+  }
+
+  function openingOk(state, key, rw, rh) {
+    var q = g(state, key + '.q'), w = g(state, key + '.w'), h = g(state, key + '.h');
+    if (!q && !w && !h) return { empty: true };
+    var qn = parseQty(q), wn = parse(w), hn = parse(h);
+    return { ok: inRange(qn, R.qty) && inRange(wn, rw) && inRange(hn, rh), q: qn, w: wn, h: hn };
+  }
+
+  function validate(state) {
+    var errors = [], warnings = [], geo = geometry(state), m = state.mode;
+    var nama = (state.nama || '').trim(), proyek = (state.proyek || '').trim(), paksa = (state.paksa || '').trim();
+    if (!NAME_RE.test(nama)) errors.push('Nama ruang: huruf, angka, spasi, - dan _ (maksimal 40).');
+    if (proyek && !NAME_RE.test(proyek)) errors.push('Proyek: huruf, angka, spasi, - dan _ (maksimal 40).');
+    if (!inRange(parse(g(state, 'tinggi')), R.tinggi)) errors.push('Tinggi plafon harus antara 1,5 dan 15 m.');
+
+    if (m === 'kotak') {
+      if (!inRange(parse(g(state, 'kotak.p')), R.p)) errors.push('Panjang harus antara 0,3 dan 100 m.');
+      if (!inRange(parse(g(state, 'kotak.l')), R.l)) errors.push('Lebar harus antara 0,3 dan 100 m.');
+    } else if (m === 'keliling') {
+      var n = (state.segs || []).length;
+      if (n < SEG_MIN || n > SEG_MAX) errors.push('Jumlah sisi harus ' + SEG_MIN + ' sampai ' + SEG_MAX + '.');
+      (state.segs || []).forEach(function (s) {
+        if (!inRange(parse(s.v), R.seg) || !DIRS[s.d]) errors.push('Ada sisi dengan panjang tidak valid.');
+      });
+      if (g(state, 'cur')) errors.push('Ada panjang sisi yang belum diberi arah.');
+      if (geo.pts && n >= SEG_MIN && geo.gap * 1000 > GAP_REJECT && !PAKSA_RE.test(paksa)) {
+        if (geo.gap * 1000 > GAP_OPEN) errors.push('Jalur belum kembali ke titik awal (selisih ' + geo.gap.toFixed(2).replace('.', ',') + ' m). Lanjutkan sisi atau periksa arah.');
+        else errors.push('Celah penutup ' + Math.round(geo.gap * 1000) + ' mm di atas 50 mm. Periksa sisi dan arah, atau isi alasan paksa di Lanjutan.');
+      }
+      else if (geo.pts && geo.gap * 1000 >= GAP_WARN && geo.gap * 1000 <= GAP_REJECT)
+        warnings.push('Celah penutup ' + Math.round(geo.gap * 1000) + ' mm: perlu cek ulang.');
+    } else {
+      [['A', 'sisi'], ['B', 'sisi'], ['C', 'sisi'], ['D', 'sisi'], ['diag', 'diag']].forEach(function (x) {
+        if (!inRange(parse(g(state, 'miring.' + x[0])), R[x[1]])) errors.push('Isian ' + (x[0] === 'diag' ? 'diagonal' : 'sisi ' + x[0]) + ' belum valid.');
+      });
+      if (geo.error) errors.push(geo.error);
+    }
+
+    [['pintu', R.bw, R.bh, 'Pintu'], ['jendela', R.bw, R.bh, 'Jendela'], ['kolom', R.kw, R.kt, 'Kolom']].forEach(function (o) {
+      var r = openingOk(state, o[0], o[1], o[2]);
+      if (!r.empty && !r.ok) errors.push(o[3] + ': isi jumlah, lebar, dan ukuran ketiga dengan benar, atau kosongkan semuanya.');
+    });
+
+    var lc = g(state, 'lengkung.c'), ls = g(state, 'lengkung.s');
+    if (lc || ls) {
+      if (m !== 'kotak') errors.push('Lengkung hanya untuk mode kotak.');
+      else if (!inRange(parse(lc), R.chord) || !inRange(parse(ls), R.sagitta)) errors.push('Lengkung: bentang 0,3 sampai 50 m, tinggi perut 0,02 sampai 25 m.');
+      else if (parse(ls) >= parse(lc) / 2) errors.push('Tinggi perut lengkung harus lebih kecil dari setengah bentang.');
+    }
+    if (paksa && !PAKSA_RE.test(paksa)) errors.push('Alasan paksa: 5 sampai 120 karakter, huruf, angka, dan tanda baca sederhana.');
+
+    var payload = null;
+    if (!errors.length) {
+      payload = buildPayload(state);
+      var bytes = new TextEncoder().encode(JSON.stringify(payload)).length;
+      if (bytes > MAX_BYTES) { errors.push('Data terlalu besar untuk dikirim.'); payload = null; }
+    }
+    return { errors: errors, warnings: warnings, payload: payload, geo: geo };
+  }
+
+  function opening(state, key) {
+    var q = g(state, key + '.q'), w = g(state, key + '.w'), h = g(state, key + '.h');
+    if (!q && !w && !h) return null;
+    return parseQty(q) + 'x(' + fmt(parse(w)) + 'x' + fmt(parse(h)) + ')';
+  }
+
+  function buildPayload(state) {
+    var m = state.mode, o = { v: 1, action: 'survei_ruang', nama: (state.nama || '').trim(), mode: m,
+                              tinggi: Number(fmt(parse(g(state, 'tinggi')))) };
+    var proyek = (state.proyek || '').trim();
+    if (proyek) o.proyek = proyek;
+    if (m === 'kotak') { o.p = Number(fmt(parse(g(state, 'kotak.p')))); o.l = Number(fmt(parse(g(state, 'kotak.l')))); }
+    else if (m === 'keliling') o.arah = state.segs.map(function (s) { return s.d + ':' + fmt(parse(s.v)); }).join(' ');
+    else {
+      o.sisi = ['A', 'B', 'C', 'D'].map(function (k) { return fmt(parse(g(state, 'miring.' + k))); }).join(',');
+      o.diag = Number(fmt(parse(g(state, 'miring.diag'))));
+    }
+    ['pintu', 'jendela', 'kolom'].forEach(function (k) { var v = opening(state, k); if (v) o[k] = v; });
+    if (m === 'kotak' && g(state, 'lengkung.c')) o.lengkung = fmt(parse(g(state, 'lengkung.c'))) + ',' + fmt(parse(g(state, 'lengkung.s')));
+    var paksa = (state.paksa || '').trim();
+    if (paksa) o.paksa = paksa;
+    return o;
+  }
+
+  root.SurveiLogic = { R: R, parse: parse, geometry: geometry, area: area, validate: validate,
+                       buildPayload: buildPayload, fmt: fmt, GAP_WARN: GAP_WARN, GAP_REJECT: GAP_REJECT, GAP_OPEN: GAP_OPEN };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+
+<script id="ui">
+(function () {
+  'use strict';
+  var L = window.SurveiLogic;
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var inTelegram = !!(tg && tg.platform && tg.platform !== 'unknown');
+  var DRAFT = 'survei-draft-v1';
+  var QTY_IDS = { 'pintu.q': 1, 'jendela.q': 1, 'kolom.q': 1 };
+  var DIR_LABEL = { U: 'Utara', T: 'Timur', S: 'Selatan', B: 'Barat' };
+  var DIR_ARROW = { U: '\u2191', T: '\u2192', S: '\u2193', B: '\u2190' };
+
+  var state = loadDraft() || { nama: '', proyek: '', paksa: '', mode: 'kotak', vals: { tinggi: '3' }, segs: [] };
+  state.active = state.mode === 'keliling' ? 'cur' : (state.mode === 'miring' ? 'miring.A' : 'kotak.p');
+  var fresh = true;
+
+  function $(id) { return document.getElementById(id); }
+  function saveDraft() {
+    try { localStorage.setItem(DRAFT, JSON.stringify({ nama: state.nama, proyek: state.proyek, paksa: state.paksa, mode: state.mode, vals: state.vals, segs: state.segs })); } catch (e) {}
+  }
+  function loadDraft() {
+    try { var d = JSON.parse(localStorage.getItem(DRAFT) || 'null'); return d && d.vals && Array.isArray(d.segs) ? d : null; } catch (e) { return null; }
+  }
+  function clearDraft() { try { localStorage.removeItem(DRAFT); } catch (e) {} }
+  function haptic(kind) { try { if (tg && tg.HapticFeedback) { kind === 'bad' ? tg.HapticFeedback.notificationOccurred('error') : tg.HapticFeedback.impactOccurred('light'); } } catch (e) {} }
+
+  function display(v) { return v ? v.replace('.', ',') : '\u2013'; }
+  function isValid(id, v) {
+    if (!v) return true;
+    var R = L.R;
+    var rng = { tinggi: R.tinggi, 'kotak.p': R.p, 'kotak.l': R.l, 'miring.A': R.sisi, 'miring.B': R.sisi, 'miring.C': R.sisi, 'miring.D': R.sisi,
+                'miring.diag': R.diag, cur: R.seg, 'lengkung.c': R.chord, 'lengkung.s': R.sagitta,
+                'pintu.w': R.bw, 'pintu.h': R.bh, 'jendela.w': R.bw, 'jendela.h': R.bh, 'kolom.w': R.kw, 'kolom.h': R.kt }[id];
+    if (QTY_IDS[id]) return /^\d{1,2}$/.test(v) && Number(v) >= 1 && Number(v) <= 50;
+    var n = L.parse(v);
+    return isFinite(n) && rng && n >= rng[0] && n <= rng[1];
+  }
+
+  function mkCell(id, label) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'cell'; b.dataset.id = id;
+    b.setAttribute('aria-pressed', String(state.active === id));
+    var s = document.createElement('small'); s.textContent = label;
+    var v = document.createElement('b'); v.className = 'num'; v.textContent = display(state.vals[id]);
+    if (!isValid(id, state.vals[id])) b.classList.add('invalid');
+    b.appendChild(s); b.appendChild(v);
+    b.addEventListener('click', function () { select(id); });
+    return b;
+  }
+  function select(id) { state.active = id; fresh = true; render(); }
+
+  var MODE_FIELDS = {
+    kotak: [['kotak.p', 'Panjang (m)'], ['kotak.l', 'Lebar (m)']],
+    miring: [['miring.A', 'Sisi 1-2 (A)'], ['miring.B', 'Sisi 2-3 (B)'], ['miring.C', 'Sisi 3-4 (C)'], ['miring.D', 'Sisi 4-1 (D)'], ['miring.diag', 'Diagonal 1-3']]
+  };
+
+  function renderFields() {
+    var host = $('fields'); host.textContent = '';
+    if (state.mode === 'keliling') {
+      var cells = document.createElement('div'); cells.className = 'cells';
+      cells.appendChild(mkCell('cur', 'Panjang sisi berikutnya (m)'));
+      var cnt = document.createElement('div'); cnt.className = 'cell'; cnt.setAttribute('aria-hidden', 'true');
+      var s = document.createElement('small'); s.textContent = 'Sisi tercatat';
+      var b = document.createElement('b'); b.className = 'num'; b.textContent = String(state.segs.length);
+      cnt.appendChild(s); cnt.appendChild(b); cells.appendChild(cnt);
+      host.appendChild(cells);
+      var chips = document.createElement('div'); chips.className = 'chips';
+      state.segs.forEach(function (sg) {
+        var c = document.createElement('span'); c.className = 'chip';
+        c.textContent = DIR_ARROW[sg.d] + ' ' + display(sg.v); chips.appendChild(c);
+      });
+      host.appendChild(chips);
+      var pad = document.createElement('div'); pad.className = 'dpad';
+      ['U', 'T', 'S', 'B'].forEach(function (d) {
+        var k = document.createElement('button'); k.type = 'button'; k.className = 'dir';
+        k.textContent = DIR_ARROW[d] + ' ' + DIR_LABEL[d]; k.dataset.dir = d;
+        k.addEventListener('click', function () { addSeg(d); });
+        pad.appendChild(k);
+      });
+      host.appendChild(pad);
+      var u = document.createElement('button'); u.type = 'button'; u.className = 'undo'; u.textContent = 'Urungkan sisi terakhir';
+      u.addEventListener('click', function () { state.segs.pop(); haptic(); render(); });
+      host.appendChild(u);
+    } else {
+      var grid = document.createElement('div'); grid.className = 'cells';
+      MODE_FIELDS[state.mode].forEach(function (f) { grid.appendChild(mkCell(f[0], f[1])); });
+      host.appendChild(grid);
+    }
+  }
+
+  function renderGroups() {
+    document.querySelectorAll('[data-group]').forEach(function (el) {
+      var k = el.dataset.group; el.textContent = '';
+      if (k === 'lengkung') {
+        el.appendChild(mkCell('lengkung.c', 'Bentang')); el.appendChild(mkCell('lengkung.s', 'Tinggi perut'));
+      } else {
+        var third = k === 'kolom' ? 'Tebal' : 'Tinggi';
+        el.appendChild(mkCell(k + '.q', 'Jumlah')); el.appendChild(mkCell(k + '.w', 'Lebar')); el.appendChild(mkCell(k + '.h', third));
+      }
+    });
+  }
+
+  function renderPad() {
+    var pad = $('pad'); pad.textContent = '';
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back'].forEach(function (k) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'key';
+      b.textContent = k === 'back' ? '\u232B' : (k === '.' ? ',' : k);
+      b.setAttribute('aria-label', k === 'back' ? 'Hapus' : (k === '.' ? 'Koma' : k));
+      b.addEventListener('click', function () { press(k); });
+      pad.appendChild(b);
+    });
+    if (state.mode !== 'keliling') {
+      var n = document.createElement('button'); n.type = 'button'; n.className = 'key wide'; n.textContent = 'Isian berikutnya';
+      n.addEventListener('click', nextField); pad.appendChild(n);
+    }
+  }
+
+  function nextField() {
+    var list = (MODE_FIELDS[state.mode] || []).map(function (f) { return f[0]; });
+    var i = list.indexOf(state.active);
+    if (i >= 0) select(list[(i + 1) % list.length]);
+  }
+
+  function press(k) {
+    var id = state.active, s = state.vals[id] || '';
+    var qty = !!QTY_IDS[id];
+    if (fresh) { if (k !== 'back') s = ''; fresh = false; }
+    if (k === 'back') s = s.slice(0, -1);
+    else if (k === '.') { if (qty) return; if (!s) s = '0.'; else if (s.indexOf('.') < 0) s += '.'; else return; }
+    else {
+      var next = s === '0' ? k : s + k, parts = next.split('.');
+      if (qty ? next.length > 2 : (parts[0].length > 3 || (parts[1] && parts[1].length > 3))) return;
+      s = next;
+    }
+    state.vals[id] = s; haptic(); render();
+  }
+
+  function addSeg(d) {
+    var v = state.vals.cur || '';
+    if (!isValid('cur', v) || !v) { flash('Isi panjang sisi dulu (0,05 sampai 100 m), lalu tekan arah.', 'bad'); haptic('bad'); return; }
+    if (state.segs.length >= 60) { flash('Maksimal 60 sisi.', 'bad'); return; }
+    state.segs.push({ d: d, v: v }); state.vals.cur = ''; fresh = true; haptic(); render();
+  }
+
+  function planSvg(geo) {
+    var host = $('plan'); host.textContent = '';
+    if (!geo.pts) {
+      var e = document.createElement('div'); e.className = 'empty';
+      e.textContent = geo.error || (state.mode === 'keliling' ? 'Ketik panjang sisi, lalu tekan arah.' : 'Denah muncul setelah ukuran terisi.');
+      host.appendChild(e); return;
+    }
+    var W = 340, H = 150, pad = 26, pts = geo.pts;
+    var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+    var minx = Math.min.apply(null, xs), maxx = Math.max.apply(null, xs), miny = Math.min.apply(null, ys), maxy = Math.max.apply(null, ys);
+    var sc = Math.min((W - 2 * pad) / Math.max(maxx - minx, 0.01), (H - 2 * pad) / Math.max(maxy - miny, 0.01));
+    function X(x) { return (pad + (x - minx) * sc + (W - 2 * pad - (maxx - minx) * sc) / 2).toFixed(1); }
+    function Y(y) { return (H - pad - (y - miny) * sc - (H - 2 * pad - (maxy - miny) * sc) / 2).toFixed(1); }
+    var NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Pratinjau denah ruang');
+    function el(name, attrs, text) {
+      var n = document.createElementNS(NS, name);
+      Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+      if (text) n.textContent = text; svg.appendChild(n); return n;
+    }
+    var path = pts.map(function (p, i) { return (i ? 'L' : 'M') + X(p[0]) + ' ' + Y(p[1]); }).join(' ') + (geo.closed ? ' Z' : '');
+    el('path', { d: path, fill: geo.closed ? 'rgba(197,168,128,0.08)' : 'none', stroke: '#c5a880', 'stroke-width': '2', 'stroke-linejoin': 'round' });
+    var gapmm = geo.gap * 1000;
+    if (!geo.closed && pts.length > 2) {
+      var col = gapmm > L.GAP_REJECT ? '#e0675a' : (gapmm >= L.GAP_WARN ? '#e0a33a' : '#8f7b5c');
+      var last = pts[pts.length - 1];
+      el('line', { x1: X(last[0]), y1: Y(last[1]), x2: X(pts[0][0]), y2: Y(pts[0][1]), stroke: col, 'stroke-width': '1.5', 'stroke-dasharray': '4 3' });
+    }
+    el('circle', { cx: X(pts[0][0]), cy: Y(pts[0][1]), r: '4', fill: '#121214', stroke: '#c5a880', 'stroke-width': '2' });
+    var cx = xs.reduce(function (a, b) { return a + b; }, 0) / xs.length, cy = ys.reduce(function (a, b) { return a + b; }, 0) / ys.length;
+    if (geo.labels.length <= 12) {
+      geo.labels.forEach(function (len, i) {
+        var a = pts[i], b = pts[(i + 1) % pts.length];
+        var mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+        var dx = (mx - cx) * sc, dy = -(my - cy) * sc, n = Math.hypot(dx, dy) || 1;
+        el('text', { x: (Number(X(mx)) + dx / n * 11).toFixed(1), y: (Number(Y(my)) + dy / n * 11 + 3).toFixed(1), 'text-anchor': 'middle',
+                     fill: '#9a9aa2', 'font-size': '10' }, String(Number(len.toFixed(2))).replace('.', ','));
+      });
+    }
+    host.appendChild(svg);
+  }
+
+  function statusText(geo, res) {
+    var st = $('status'); st.className = 'status'; st.textContent = '';
+    if (!geo.pts) return;
+    var a = L.area(geo.pts);
+    if (state.mode === 'keliling') {
+      var mm = Math.round(geo.gap * 1000);
+      if (mm > L.GAP_OPEN) { st.className = 'status'; st.textContent = 'Jalur belum kembali ke titik awal: selisih ' + geo.gap.toFixed(2).replace('.', ',') + ' m.'; }
+      else if (mm < L.GAP_WARN) { st.className = 'status ok'; st.textContent = 'Celah penutup ' + mm + ' mm, diterima. Luas dasar ' + a.toFixed(2).replace('.', ',') + ' m2.'; }
+      else if (mm <= L.GAP_REJECT) { st.className = 'status warn'; st.textContent = 'Celah penutup ' + mm + ' mm: dikirim dengan tanda perlu cek ulang.'; }
+      else { st.className = 'status bad'; st.textContent = 'Celah penutup ' + mm + ' mm: di atas 50 mm, ditolak kecuali diberi alasan paksa.'; }
+    } else {
+      st.className = 'status ok'; st.textContent = 'Luas dasar ' + a.toFixed(2).replace('.', ',') + ' m2 (sebelum bukaan dan kolom).';
+    }
+  }
+
+  function flash(text, kind) { var m = $('msg'); m.textContent = text; m.className = 'msg ' + (kind || ''); }
+
+  function render() {
+    document.querySelectorAll('.tab').forEach(function (t) { t.setAttribute('aria-pressed', String(t.dataset.mode === state.mode)); });
+    $('tinggiVal').textContent = display(state.vals.tinggi);
+    $('tinggiCell').setAttribute('aria-pressed', String(state.active === 'tinggi'));
+    renderFields(); renderGroups(); renderPad();
+    var res = L.validate(state);
+    planSvg(res.geo); statusText(res.geo, res);
+    var go = $('go');
+    go.setAttribute('aria-disabled', String(res.errors.length > 0));
+    var msg = $('msg');
+    if (res.errors.length) { msg.className = 'msg'; msg.textContent = res.errors[0]; }
+    else if (res.warnings.length) { msg.className = 'msg'; msg.textContent = res.warnings[0]; }
+    else { msg.className = 'msg ok'; msg.textContent = 'Siap diproses.'; }
+    saveDraft();
+  }
+
+  function send() {
+    var res = L.validate(state);
+    if (res.errors.length) { flash(res.errors[0], 'bad'); haptic('bad'); return; }
+    var json = JSON.stringify(res.payload);
+    if (!inTelegram) {
+      flash('Dibuka di luar Telegram, jadi tidak dikirim. JSON disalin untuk uji.', 'ok');
+      try { navigator.clipboard.writeText(json); } catch (e) {}
+      window.__lastPayload = json; return;
+    }
+    clearDraft();
+    try { tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+    tg.sendData(json);
+  }
+
+  document.querySelectorAll('.tab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      state.mode = t.dataset.mode;
+      state.active = state.mode === 'keliling' ? 'cur' : (state.mode === 'miring' ? 'miring.A' : 'kotak.p');
+      fresh = true; render();
+    });
+  });
+  $('tinggiCell').addEventListener('click', function () { select('tinggi'); });
+  $('nama').value = state.nama; $('proyek').value = state.proyek; $('paksa').value = state.paksa;
+  $('nama').addEventListener('input', function (e) { state.nama = e.target.value; render(); });
+  $('proyek').addEventListener('input', function (e) { state.proyek = e.target.value; render(); });
+  $('paksa').addEventListener('input', function (e) { state.paksa = e.target.value; render(); });
+  $('go').addEventListener('click', send);
+  if (!inTelegram) $('go').textContent = 'Salin JSON (uji, di luar Telegram)';
+
+  if (tg) {
+    try { tg.ready(); tg.expand(); tg.setHeaderColor('#121214'); tg.setBackgroundColor('#121214');
+          if (typeof tg.enableClosingConfirmation === 'function') tg.enableClosingConfirmation();
+          if (typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes(); } catch (e) {}
+  }
+  render();
+})();
+</script>
+</body>
+</html>
