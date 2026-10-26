@@ -85,6 +85,10 @@
 </head>
 <body>
 
+<label class="field" style="margin-bottom:8px"><small>Nama proyek (wajib, nama folder hasil)</small>
+  <input id="proyek" type="text" maxlength="40" autocomplete="off" list="daftar-proyek" placeholder="RUMAH-BUDI" aria-label="Nama proyek"></label>
+<datalist id="daftar-proyek"></datalist>
+
 <div class="top">
   <label class="field"><small>Nama ruang</small>
     <input id="nama" type="text" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="Ruang tamu" aria-label="Nama ruang"></label>
@@ -122,8 +126,6 @@
 <details id="lanjutan">
   <summary>Lanjutan</summary>
   <div>
-    <label class="field" style="margin-bottom:8px"><small>Proyek (opsional)</small>
-      <input id="proyek" type="text" maxlength="40" autocomplete="off" placeholder="RUMAH-CONTOH" aria-label="Proyek"></label>
     <div class="row-label">Dinding lengkung (hanya mode kotak): bentang, tinggi perut (m)</div>
     <div class="cells" data-group="lengkung"></div>
     <label class="field" style="margin-top:8px"><small>Alasan paksa (hanya bila celah di atas 50 mm sudah dicek)</small>
@@ -214,7 +216,8 @@
     var errors = [], warnings = [], geo = geometry(state), m = state.mode;
     var nama = (state.nama || '').trim(), proyek = (state.proyek || '').trim(), paksa = (state.paksa || '').trim();
     if (!NAME_RE.test(nama)) errors.push('Nama ruang: huruf, angka, spasi, - dan _ (maksimal 40).');
-    if (proyek && !NAME_RE.test(proyek)) errors.push('Proyek: huruf, angka, spasi, - dan _ (maksimal 40).');
+    if (!proyek) errors.push('Nama proyek wajib diisi, supaya hasil masuk ke folder yang benar.');
+    else if (!NAME_RE.test(proyek)) errors.push('Nama proyek: huruf, angka, spasi, - dan _ (maksimal 40).');
     if (!inRange(parse(g(state, 'tinggi')), R.tinggi)) errors.push('Tinggi plafon harus antara 1,5 dan 15 m.');
 
     if (m === 'kotak') {
@@ -305,6 +308,25 @@
   var state = loadDraft() || { nama: '', proyek: '', paksa: '', mode: 'kotak', vals: { tinggi: '3' }, segs: [] };
   state.active = state.mode === 'keliling' ? 'cur' : (state.mode === 'miring' ? 'miring.A' : 'kotak.p');
   var fresh = true;
+  var PROJ_KEY = 'survei-proyek-v1';
+  function rememberProject(n) {
+    try {
+      var a = JSON.parse(localStorage.getItem(PROJ_KEY) || '[]');
+      if (!Array.isArray(a)) a = [];
+      if (a.indexOf(n) < 0) a.push(n);
+      a.sort();
+      localStorage.setItem(PROJ_KEY, JSON.stringify(a.slice(0, 50)));
+    } catch (e) {}
+  }
+  function fillProjects() {
+    var dl = $('daftar-proyek'); dl.textContent = '';
+    try {
+      var a = JSON.parse(localStorage.getItem(PROJ_KEY) || '[]');
+      (Array.isArray(a) ? a : []).forEach(function (n) {
+        var o = document.createElement('option'); o.value = n; dl.appendChild(o);
+      });
+    } catch (e) {}
+  }
 
   function $(id) { return document.getElementById(id); }
   function saveDraft() {
@@ -516,8 +538,10 @@
     if (!inTelegram) {
       flash('Dibuka di luar Telegram, jadi tidak dikirim. JSON disalin untuk uji.', 'ok');
       try { navigator.clipboard.writeText(json); } catch (e) {}
+      rememberProject(res.payload.proyek);
       window.__lastPayload = json; return;
     }
+    rememberProject(res.payload.proyek);
     clearDraft();
     try { tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
     tg.sendData(json);
@@ -543,6 +567,7 @@
           if (typeof tg.enableClosingConfirmation === 'function') tg.enableClosingConfirmation();
           if (typeof tg.disableVerticalSwipes === 'function') tg.disableVerticalSwipes(); } catch (e) {}
   }
+  fillProjects();
   render();
 })();
 </script>
