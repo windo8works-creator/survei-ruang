@@ -22,7 +22,6 @@
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
   .num { font-variant-numeric: tabular-nums; }
 
-  /* kerangka: area gulir di atas, papan angka tertambat di bawah */
   .app { height: 100vh; height: 100dvh; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; }
   .scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
             padding: calc(10px + env(safe-area-inset-top)) 14px 14px; }
@@ -58,6 +57,12 @@
   .status { margin: 3px 4px 0; font-size: 12px; color: var(--muted); min-height: 16px; }
   .status.ok { color: var(--ok); } .status.warn { color: var(--warn); } .status.bad { color: var(--bad); }
 
+  /* Kartu Panduan Laser Aktif */
+  .laser-card { background: var(--raised); border: 1px solid var(--accent); border-radius: 12px; padding: 8px 12px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .laser-card .info { font-size: 12px; color: var(--text); }
+  .laser-card .info b { color: var(--accent); }
+  .btn-alt { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 5px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+
   .cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
   .cells.two-col { grid-template-columns: repeat(2, 1fr); }
   .cell { background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; padding: 7px 10px; min-height: 52px; text-align: left; }
@@ -67,15 +72,11 @@
   .cell.invalid b { color: var(--bad); }
 
   .chips-row { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
-  .miring-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
-  .miring-btn { flex: 1; min-height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--rule);
-                background: var(--paper); color: var(--accent); font-size: 12px; font-weight: 500; text-align: center; }
-  .miring-btn:active { background: var(--accent-soft); border-color: var(--accent); }
-  .miring-btn[disabled] { color: var(--muted); opacity: 0.45; }
   .chips { flex: 1; display: flex; flex-wrap: wrap; gap: 5px; min-height: 28px; }
   .chip { background: var(--raised); border: 1px solid var(--rule); border-radius: 999px; padding: 3px 9px; font-size: 12px; font-variant-numeric: tabular-nums; }
   .undo { flex: none; min-height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--rule); color: var(--muted); font-size: 13px; }
   .undo:active { color: var(--text); }
+  .btn-side-ctrl { min-height: 34px; padding: 0 12px; border-radius: 10px; border: 1px dashed var(--accent); color: var(--accent); font-size: 12px; font-weight: 500; }
 
   details { background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; }
   summary { min-height: 44px; display: flex; align-items: center; padding: 0 14px; cursor: pointer; font-size: 14px; color: var(--muted); list-style: none; }
@@ -104,7 +105,6 @@
   .hint { color: var(--muted); font-size: 11px; margin: 6px 0 0; }
   .row-label { color: var(--muted); font-size: 12px; margin: 0 0 6px; }
 
-  /* papan angka */
   .disp { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-height: 30px; margin-bottom: 6px; }
   .disp span { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .disp b { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -154,6 +154,8 @@
 
     <div class="plan"><div id="plan"></div><div class="status" id="status" aria-live="polite"></div></div>
 
+    <div id="laserGuide" style="display:none"></div>
+
     <div id="fields"></div>
 
     <details id="bukaan">
@@ -186,7 +188,7 @@
 </div>
 
 <script id="logic">
-/* Logika murni (tanpa DOM): aturan harus sama dengan survei_bot_daemon.py */
+/* Logika murni: kompatibel penuh dengan survei_ruang.py & survei_bot_daemon.py */
 (function (root) {
   'use strict';
   var R = {
@@ -214,23 +216,6 @@
   function fmt(n) { return String(Number(n.toFixed(3))); }
   function g(state, id) { return (state.vals && state.vals[id]) || ''; }
 
-  /* --- mode miring: poligon 3..12 sisi --- */
-  var SIDE_KEYS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
-
-  function miringConfig(state) {
-    var n = (state && state.miringN) ? Number(state.miringN) : 4;
-    if (!(n >= 3 && n <= 12)) n = 4;
-    var alt24 = !!(state && state.miringAlt24 && n === 4);
-    var sideIds = SIDE_KEYS.slice(0, n).map(function (k) { return 'miring.' + k; });
-    var diagPairs = [];
-    if (n === 4) {
-      diagPairs.push(alt24 ? [2, 4, 'miring.diag24'] : [1, 3, 'miring.diag']);
-    } else if (n > 4) {
-      for (var k = 3; k < n; k++) diagPairs.push([1, k, k === 3 ? 'miring.diag' : ('miring.diag1_' + k)]);
-    }
-    return { n: n, alt24: alt24, sideIds: sideIds, diagPairs: diagPairs };
-  }
-
   function geometry(state) {
     var m = state.mode, pts, labels;
     if (m === 'kotak') {
@@ -251,99 +236,46 @@
       var e = pts[pts.length - 1];
       return { pts: pts, closed: false, labels: labels, gap: Math.hypot(e[0] - pts[0][0], e[1] - pts[0][1]) };
     }
-    var cfg = miringConfig(state), n = cfg.n;
-    var sides = cfg.sideIds.map(function (id) { return parse(g(state, id)); });
-    if (!sides.every(function (x) { return inRange(x, R.sisi); })) return { pts: null, cfg: cfg };
-
-    if (n === 3) {
-      var a3 = sides[0], b3 = sides[1], c3 = sides[2];
-      if (!(Math.abs(a3 - b3) < c3 && c3 < a3 + b3))
-        return { pts: null, cfg: cfg, error: 'Sisi A, B, dan C tidak dapat bertemu membentuk segitiga.' };
-      var y3t = (c3 * c3 + a3 * a3 - b3 * b3) / (2 * a3), x2t = c3 * c3 - y3t * y3t;
-      if (x2t < -1e-9) return { pts: null, cfg: cfg, error: 'Sisi A, B, dan C tidak membentuk segitiga tertutup.' };
-      return { pts: [[0, 0], [0, a3], [Math.sqrt(Math.max(0, x2t)), y3t]],
-               closed: true, labels: sides, gap: 0, cfg: cfg, nWalls: 3 };
-    }
-
-    /* diagonal yang sudah terukur vs yang belum (Active Next-Shot Guider) */
-    var missing = [], dVals = {};
-    cfg.diagPairs.forEach(function (dp) {
-      var v = parse(g(state, dp[2]));
-      if (inRange(v, R.diag)) dVals[dp[0] + '-' + dp[1]] = v;
-      else missing.push({ from: dp[0], to: dp[1], id: dp[2] });
-    });
-
-    if (missing.length) {
-      /* Sketsa sementara: sisi disusun berurutan dengan sudut putar sama besar,
-         supaya pin tembakan berikutnya tetap bisa ditunjuk di kanvas. */
-      var turn = 2 * Math.PI / n, psi = 0, sk = [[0, 0], [0, sides[0]]];
-      for (var si = 2; si < n; si++) {
-        psi += turn;
-        var sPrev = sk[sk.length - 1];
-        sk.push([sPrev[0] + sides[si] * Math.sin(psi), sPrev[1] + sides[si] * Math.cos(psi)]);
-      }
-      return { pts: sk, closed: false, labels: sides.slice(0, n - 1), gap: 0, cfg: cfg,
-               nWalls: n, sketch: true, nextShot: missing[0], missingCount: missing.length };
-    }
-
-    if (n === 4 && !cfg.alt24) {
-      var A = sides[0], B = sides[1], C = sides[2], D = sides[3], dg = dVals['1-3'];
-      if (!(Math.abs(A - B) < dg && dg < A + B))
-        return { pts: null, cfg: cfg, error: 'Diagonal 1-3 tidak membentuk segitiga dengan sisi A dan B.' };
-      if (!(Math.abs(C - D) < dg && dg < C + D))
-        return { pts: null, cfg: cfg, error: 'Diagonal 1-3 tidak membentuk segitiga dengan sisi C dan D.' };
+    
+    // Mode Miring: Poligon N-Sisi Dinamis + Next-Shot Guider
+    var sides = (state.miring_sides || ['4', '3', '4', '3']).map(parse);
+    var n = sides.length;
+    if (sides.some(function (x) { return !(x > 0); })) return { pts: null };
+    
+    // Kasus klasik 4 sisi: jika diagonal 1-3 terisi
+    var d13 = parse(g(state, 'miring.diag.1-3') || g(state, 'miring.diag'));
+    if (n === 4 && d13 > 0) {
+      var A = sides[0], B = sides[1], C = sides[2], D = sides[3], dg = d13;
       var y3 = (dg * dg + A * A - B * B) / (2 * A), x2 = dg * dg - y3 * y3;
-      if (x2 < -1e-9) return { pts: null, cfg: cfg, error: 'Diagonal 1-3 tidak cocok dengan sisi A dan B.' };
+      if (x2 < -1e-9) return { pts: null, error: 'Diagonal 1-3 tidak cocok dengan sisi A dan B.' };
       var x3 = Math.sqrt(Math.max(0, x2));
       var cb = (dg * dg + D * D - C * C) / (2 * dg * D);
-      if (cb < -1 || cb > 1) return { pts: null, cfg: cfg, error: 'Sisi C dan D tidak cocok dengan diagonal 1-3.' };
+      if (cb < -1 || cb > 1) return { pts: null, error: 'Sisi C dan D tidak cocok dengan diagonal 1-3.' };
       var th4 = Math.atan2(y3, x3) - Math.acos(cb);
-      var p4 = [D * Math.cos(th4), D * Math.sin(th4)];
-      return { pts: [[0, 0], [0, A], [x3, y3], p4], closed: true, labels: sides, gap: 0, cfg: cfg, nWalls: 4,
-               checkLabel: 'Cek lapangan Pojok 2–4: ' + fmt(Math.hypot(p4[0], p4[1] - A)) + ' m' };
+      return {
+        pts: [[0, 0], [0, A], [x3, y3], [D * Math.cos(th4), D * Math.sin(th4)]],
+        closed: true, labels: sides, gap: 0, next_shot: null
+      };
     }
 
-    if (n === 4 && cfg.alt24) {
-      /* Diagonal 2-4 dipakai saat jalur 1-3 terhalang; P4 dicari dari segitiga 1-2-4,
-         P3 dari segitiga 2-3-4 di sisi berlawanan P1 terhadap garis 2-4. */
-      var A2 = sides[0], B2 = sides[1], C2 = sides[2], D2 = sides[3], d24 = dVals['2-4'];
-      if (!(Math.abs(A2 - D2) < d24 && d24 < A2 + D2))
-        return { pts: null, cfg: cfg, error: 'Diagonal 2-4 tidak membentuk segitiga dengan sisi A dan D.' };
-      if (!(Math.abs(B2 - C2) < d24 && d24 < B2 + C2))
-        return { pts: null, cfg: cfg, error: 'Diagonal 2-4 tidak membentuk segitiga dengan sisi B dan C.' };
-      var c1 = (A2 * A2 + D2 * D2 - d24 * d24) / (2 * A2 * D2);
-      var a1 = Math.acos(Math.max(-1, Math.min(1, c1)));
-      var pt4 = [D2 * Math.sin(a1), D2 * Math.cos(a1)];
-      var vx = pt4[0], vy = pt4[1] - A2, phi2 = Math.atan2(vy, vx);
-      var c2 = (d24 * d24 + B2 * B2 - C2 * C2) / (2 * d24 * B2);
-      var g2 = Math.acos(Math.max(-1, Math.min(1, c2)));
-      var kand = [1, -1].map(function (sg) {
-        var th = phi2 + sg * g2;
-        var p = [B2 * Math.cos(th), A2 + B2 * Math.sin(th)];
-        return { cross: vx * (p[1] - A2) - vy * p[0], p: p };
-      });
-      var sisiP1 = -vx * A2;  /* posisi P1 terhadap garis P2->P4 */
-      var pt3 = (kand[0].cross * sisiP1 < 0) ? kand[0].p : kand[1].p;
-      var chk13 = Math.hypot(pt3[0], pt3[1]);
-      return { pts: [[0, 0], [0, A2], pt3, pt4], closed: true, labels: sides, gap: 0, cfg: cfg, nWalls: 4,
-               checkLabel: 'Cek lapangan Pojok 1–3: ' + fmt(chk13) + ' m' };
+    // Rekomendasi Tembakan Berikutnya (Next-Shot Recommender)
+    var needed = [];
+    for (var target = 3; target < n; target++) {
+      var key = 'miring.diag.1-' + target;
+      var val = parse(g(state, key));
+      if (!(val > 0)) {
+        needed.push({ from: 1, to: target });
+      }
     }
 
-    /* Poligon N >= 5: fan triangulation dari Pojok 1 (1-3, 1-4, ..., 1-(N-1)) */
-    var ptsN = [[0, 0], [0, sides[0]]], psiN = 0;
-    for (var k = 3; k <= n; k++) {
-      var rPrev = (k === 3) ? sides[0] : dVals['1-' + (k - 1)];
-      var rCurr = (k === n) ? sides[n - 1] : dVals['1-' + k];
-      var edge = sides[k - 2];
-      if (!(Math.abs(rPrev - rCurr) < edge && edge < rPrev + rCurr))
-        return { pts: null, cfg: cfg, error: 'Segitiga Pojok 1-' + (k - 1) + '-' + k + ' tidak dapat bertemu. Cek tembakan laser.' };
-      var ca = (rPrev * rPrev + rCurr * rCurr - edge * edge) / (2 * rPrev * rCurr);
-      psiN += Math.acos(Math.max(-1, Math.min(1, ca)));
-      ptsN.push([rCurr * Math.sin(psiN), rCurr * Math.cos(psiN)]);
-    }
-    var chk24 = Math.hypot(ptsN[3][0] - ptsN[1][0], ptsN[3][1] - ptsN[1][1]);
-    return { pts: ptsN, closed: true, labels: sides, gap: 0, cfg: cfg, nWalls: n,
-             checkLabel: 'Cek lapangan Pojok 2–4: ' + fmt(chk24) + ' m' };
+    return {
+      pts: [[0, 0], [0, sides[0]]],
+      closed: false,
+      labels: sides,
+      gap: 0,
+      next_shot: needed.length > 0 ? needed[0] : null,
+      needed_count: needed.length
+    };
   }
 
   function signedArea(pts) {
@@ -361,7 +293,6 @@
     return Math.abs(s) / 2;
   }
 
-  /* baris ukuran bukaan: state.open[kind] = [{q, w, h}, ...] */
   function openRows(state, kind) { return (state.open && state.open[kind]) || []; }
   function rowStatus(r, kind, ctx) {
     var cfg = KINDS[kind], c = ctx || {};
@@ -423,18 +354,19 @@
       } else if (geo.pts && geo.gap * 1000 >= GAP_WARN && geo.gap * 1000 <= GAP_REJECT)
         warnings.push('Celah penutup ' + Math.round(geo.gap * 1000) + ' mm: perlu cek ulang.');
     } else {
-      var mcfg = miringConfig(state);
-      mcfg.sideIds.forEach(function (id, idx) {
-        if (!inRange(parse(g(state, id)), R.sisi)) errors.push('Isian sisi ' + SIDE_KEYS[idx] + ' belum valid.');
+      var sides = state.miring_sides || ['4', '3', '4', '3'];
+      sides.forEach(function (sVal, i) {
+        if (!inRange(parse(g(state, 'miring.sisi.' + i) || sVal), R.sisi)) {
+          errors.push('Isian sisi ' + (i + 1) + ' belum valid.');
+        }
       });
-      mcfg.diagPairs.forEach(function (dp) {
-        if (!inRange(parse(g(state, dp[2])), R.diag))
-          errors.push('Tembak diagonal Pojok ' + dp[0] + ' ke ' + dp[1] + ' (0,3 sampai 200 m).');
-      });
+      if (geo.next_shot) {
+        errors.push('Ukur diagonal dari Pojok ' + geo.next_shot.from + ' ke Pojok ' + geo.next_shot.to + ' untuk mengunci ruang.');
+      }
       if (geo.error) errors.push(geo.error);
     }
 
-    var ctx = { nWalls: geo.pts ? (geo.nWalls || geo.labels.length) : 0, tinggiMm: parse(g(state, 'tinggi')) * 1000 };
+    var ctx = { nWalls: geo.pts && geo.labels ? geo.labels.length : 0, tinggiMm: parse(g(state, 'tinggi')) * 1000 };
     var tetap = [];
     Object.keys(KINDS).forEach(function (kind) {
       var cfg = KINDS[kind], rows = openRows(state, kind), terisi = 0;
@@ -444,7 +376,7 @@
         terisi++;
         var nama = cfg.label + ' ' + (i + 1);
         if (!st.ok) { errors.push(nama + ': ' + st.err + '.'); return; }
-        if (r.d && r.j && geo.pts && geo.labels[+r.d - 1] != null) {
+        if (r.d && r.j && geo.pts && geo.labels && geo.labels[+r.d - 1] != null) {
           var panjang = geo.labels[+r.d - 1] * 1000, lebar = Math.round(st.w * 1000), mulai = +r.j;
           if (mulai + lebar > panjang + 1) {
             errors.push(nama + ': jarak ' + mulai + ' mm + lebar ' + lebar + ' mm melebihi panjang dinding ' + r.d + ' (' + Math.round(panjang) + ' mm).');
@@ -505,16 +437,20 @@
     if (m === 'kotak') { o.p = Number(fmt(parse(g(state, 'kotak.p')))); o.l = Number(fmt(parse(g(state, 'kotak.l')))); }
     else if (m === 'keliling') o.arah = state.segs.map(function (s) { return s.d + ':' + fmt(parse(s.v)); }).join(' ');
     else {
-      var pcfg = miringConfig(state);
-      o.sisi = pcfg.sideIds.map(function (id) { return fmt(parse(g(state, id))); }).join(',');
-      if (pcfg.n === 3) {
-        o.diag = 0;
-      } else if (pcfg.n === 4 && !pcfg.alt24) {
-        o.diag = Number(fmt(parse(g(state, 'miring.diag'))));
+      var sides = state.miring_sides || ['4', '3', '4', '3'];
+      o.sisi = sides.map(function (sVal, i) { return fmt(parse(g(state, 'miring.sisi.' + i) || sVal)); }).join(',');
+      
+      var diags = [];
+      for (var target = 3; target < sides.length; target++) {
+        var key = 'miring.diag.1-' + target;
+        var val = parse(g(state, key));
+        if (val > 0) diags.push('1-' + target + ':' + fmt(val));
+      }
+      // Kompatibilitas mundur: jika hanya 4 sisi dan 1 diagonal
+      if (sides.length === 4 && diags.length === 1) {
+        o.diag = Number(fmt(parse(g(state, 'miring.diag.1-3'))));
       } else {
-        o.diag = pcfg.diagPairs.map(function (dp) {
-          return dp[0] + '-' + dp[1] + ':' + fmt(parse(g(state, dp[2])));
-        }).join(',');
+        o.diag = diags.join(',');
       }
     }
     Object.keys(KINDS).forEach(function (k) { var v = bukaanList(state, k); if (v.length) o[k] = v; });
@@ -526,7 +462,6 @@
 
   root.SurveiLogic = { R: R, KINDS: KINDS, MAX_OPEN: MAX_OPEN, parse: parse, geometry: geometry, area: area, signedArea: signedArea,
                        validate: validate, buildPayload: buildPayload, fmt: fmt,
-                       miringConfig: miringConfig, SIDE_KEYS: SIDE_KEYS,
                        GAP_WARN: GAP_WARN, GAP_REJECT: GAP_REJECT, GAP_OPEN: GAP_OPEN };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
@@ -537,34 +472,14 @@
   var L = window.SurveiLogic;
   var tg = window.Telegram && window.Telegram.WebApp;
   var inTelegram = !!(tg && tg.platform && tg.platform !== 'unknown');
-  var DRAFT = 'survei-draft-v2', PROJ_KEY = 'survei-proyek-v1';
+  var DRAFT = 'survei-draft-v3', PROJ_KEY = 'survei-proyek-v1';
   var DIR_ARROW = { U: '\u2191', T: '\u2192', S: '\u2193', B: '\u2190' };
   var DIR_NAME = { U: 'Utara', T: 'Timur', S: 'Selatan', B: 'Barat' };
   var KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back'];
-  var LABEL = {
-    tinggi: 'Tinggi plafon (m)', 'kotak.p': 'Panjang (m)', 'kotak.l': 'Lebar (m)',
-    'miring.A': 'Sisi 1-2 (A)', 'miring.B': 'Sisi 2-3 (B)', 'miring.C': 'Sisi 3-4 (C)', 'miring.D': 'Sisi 4-1 (D)',
-    'miring.diag': 'Diagonal 1-3 (m)', cur: 'Panjang sisi berikutnya (m)',
-    'lengkung.c': 'Lengkung: bentang (m)', 'lengkung.s': 'Lengkung: tinggi perut (m)'
-  };
 
   function newRow() { return { q: '', w: '', h: '', d: '', j: '', s: '', e: '', a: '', x: false }; }
-  function defaultActive(mode) { return mode === 'keliling' ? 'cur' : (mode === 'miring' ? 'miring.A' : 'kotak.p'); }
+  function defaultActive(mode) { return mode === 'keliling' ? 'cur' : (mode === 'miring' ? 'miring.sisi.0' : 'kotak.p'); }
   function $(id) { return document.getElementById(id); }
-
-  /* label dinamis untuk mode miring (3..12 sisi) */
-  function miringLabel(id) {
-    if (id === 'miring.diag') return 'Diagonal 1-3 (m)';
-    if (id === 'miring.diag24') return 'Diagonal 2-4 (m)';
-    var md = /^miring\.diag1_(\d+)$/.exec(id);
-    if (md) return 'Diagonal 1-' + md[1] + ' (m)';
-    var ms = /^miring\.([A-L])$/.exec(id);
-    if (ms) {
-      var idx = L.SIDE_KEYS.indexOf(ms[1]), n = L.miringConfig(state).n;
-      return 'Sisi ' + (idx + 1) + '-' + ((idx + 1) % n + 1) + ' (' + ms[1] + ')';
-    }
-    return id;
-  }
 
   function loadDraft() {
     try {
@@ -583,22 +498,20 @@
     } catch (e) { return null; }
   }
   var state = loadDraft() || { nama: '', proyek: '', paksa: '', mode: 'kotak', vals: { tinggi: '3' }, segs: [],
-                               miringN: 4, miringAlt24: false,
+                               miring_sides: ['4', '3', '4', '3'],
                                open: { pintu: [newRow()], jendela: [newRow()], kolom: [newRow()] } };
   state.active = defaultActive(state.mode);
   var fresh = true, padMode = null;
 
   function saveDraft() {
     try { localStorage.setItem(DRAFT, JSON.stringify({ nama: state.nama, proyek: state.proyek, paksa: state.paksa,
-      mode: state.mode, vals: state.vals, segs: state.segs, open: state.open,
-      miringN: state.miringN, miringAlt24: state.miringAlt24 })); } catch (e) {}
+      mode: state.mode, vals: state.vals, segs: state.segs, miring_sides: state.miring_sides, open: state.open })); } catch (e) {}
   }
   function clearDraft() { try { localStorage.removeItem(DRAFT); } catch (e) {} }
   function haptic(kind) {
     try { if (tg && tg.HapticFeedback) { kind === 'bad' ? tg.HapticFeedback.notificationOccurred('error') : tg.HapticFeedback.impactOccurred('light'); } } catch (e) {}
   }
 
-  /* daftar proyek yang pernah dipakai di HP ini */
   function rememberProject(n) {
     try {
       var a = JSON.parse(localStorage.getItem(PROJ_KEY) || '[]');
@@ -616,7 +529,6 @@
     } catch (e) {}
   }
 
-  /* akses isian: id biasa ('kotak.p') atau baris bukaan ('open:jendela:1:w') */
   function parseId(id) { var p = id.split(':'); return p[0] === 'open' ? { kind: p[1], idx: Number(p[2]), f: p[3] } : null; }
   function getVal(id) {
     var o = parseId(id);
@@ -634,8 +546,21 @@
       var NAMA = { q: 'jumlah', w: 'lebar (m)', d: 'nomor dinding', j: 'jarak dari sudut kiri (mm)', s: 'tinggi ambang (mm)' };
       return cfg.label + ' ' + (o.idx + 1) + ': ' + (NAMA[o.f] || (cfg.third.toLowerCase() + ' (m)'));
     }
-    if (id.indexOf('miring.') === 0) return miringLabel(id);
-    return LABEL[id] || id;
+    if (id.indexOf('miring.sisi.') === 0) {
+      var idx = Number(id.split('.')[2]);
+      var sides = state.miring_sides || ['4', '3', '4', '3'];
+      var labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+      return 'Sisi ' + labels[idx] + ' (Pojok ' + (idx + 1) + '-' + (idx === sides.length - 1 ? 1 : idx + 2) + ')';
+    }
+    if (id.indexOf('miring.diag.') === 0) {
+      var dPair = id.replace('miring.diag.', '');
+      return 'Diagonal Pojok ' + dPair.replace('-', ' ke ') + ' (m)';
+    }
+    var LABELS = {
+      tinggi: 'Tinggi plafon (m)', 'kotak.p': 'Panjang (m)', 'kotak.l': 'Lebar (m)',
+      cur: 'Panjang sisi berikutnya (m)', 'lengkung.c': 'Lengkung: bentang (m)', 'lengkung.s': 'Lengkung: tinggi perut (m)'
+    };
+    return LABELS[id] || id;
   }
   function display(v) { return v ? v.replace('.', ',') : '\u2013'; }
   function isValid(id, v) {
@@ -651,13 +576,13 @@
       var rg = o.f === 'w' ? cfg.rw : cfg.rh;
       return isFinite(n) && n >= rg[0] && n <= rg[1];
     }
-    if (id.indexOf('miring.') === 0) {
-      n = L.parse(v);
-      var rgm = id.indexOf('diag') >= 0 ? R.diag : R.sisi;
-      return isFinite(n) && n >= rgm[0] && n <= rgm[1];
+    if (id.indexOf('miring.sisi.') === 0) {
+      n = L.parse(v); return isFinite(n) && n >= R.sisi[0] && n <= R.sisi[1];
     }
-    var map = { tinggi: R.tinggi, 'kotak.p': R.p, 'kotak.l': R.l, 'miring.A': R.sisi, 'miring.B': R.sisi, 'miring.C': R.sisi,
-                'miring.D': R.sisi, 'miring.diag': R.diag, cur: R.seg, 'lengkung.c': R.chord, 'lengkung.s': R.sagitta };
+    if (id.indexOf('miring.diag.') === 0) {
+      n = L.parse(v); return isFinite(n) && n >= R.diag[0] && n <= R.diag[1];
+    }
+    var map = { tinggi: R.tinggi, 'kotak.p': R.p, 'kotak.l': R.l, cur: R.seg, 'lengkung.c': R.chord, 'lengkung.s': R.sagitta };
     n = L.parse(v);
     return isFinite(n) && map[id] && n >= map[id][0] && n <= map[id][1];
   }
@@ -691,35 +616,12 @@
     return b;
   }
 
-  var MODE_FIELDS = {
-    kotak: [['kotak.p', 'Panjang (m)'], ['kotak.l', 'Lebar (m)'], ['tinggi', 'Tinggi (m)']]
-  };
-  function fieldList() {
-    if (state.mode === 'keliling') return ['cur', 'tinggi'];
-    if (state.mode === 'miring') {
-      var cfg = L.miringConfig(state);
-      return cfg.sideIds.concat(cfg.diagPairs.map(function (d) { return d[2]; })).concat(['tinggi']);
-    }
-    return MODE_FIELDS[state.mode].map(function (f) { return f[0]; });
-  }
-
-  function ubahSisi(delta) {
-    var n0 = L.miringConfig(state).n, n = Math.min(12, Math.max(3, n0 + delta));
-    if (n === n0) return;
-    state.miringN = n;
-    if (n !== 4) state.miringAlt24 = false;
-    if (fieldList().indexOf(state.active) < 0) state.active = 'miring.A';
-    fresh = true; haptic(); render();
-  }
-  function gantiDiagonal() {
-    state.miringAlt24 = !state.miringAlt24;
-    if (fieldList().indexOf(state.active) < 0) state.active = 'miring.A';
-    fresh = true; haptic(); render();
-  }
+  var MODE_FIELDS_KOTAK = [['kotak.p', 'Panjang (m)'], ['kotak.l', 'Lebar (m)'], ['tinggi', 'Tinggi (m)']];
 
   function renderFields() {
     var host = $('fields'); host.textContent = '';
     var grid = document.createElement('div'); grid.className = 'cells';
+    
     if (state.mode === 'keliling') {
       grid.appendChild(mkCell('cur', 'Panjang sisi (m)'));
       var cnt = document.createElement('div'); cnt.className = 'cell'; cnt.setAttribute('aria-hidden', 'true');
@@ -735,41 +637,68 @@
         c.textContent = DIR_ARROW[sg.d] + ' ' + display(sg.v); chips.appendChild(c);
       });
       row.appendChild(chips); host.appendChild(row);
-    } else if (state.mode === 'miring') {
-      var mcfg = L.miringConfig(state);
-      mcfg.sideIds.forEach(function (id) { grid.appendChild(mkCell(id, miringLabel(id))); });
-      mcfg.diagPairs.forEach(function (dp) { grid.appendChild(mkCell(dp[2], miringLabel(dp[2]))); });
+    } else if (state.mode === 'kotak') {
+      MODE_FIELDS_KOTAK.forEach(function (f) { grid.appendChild(mkCell(f[0], f[1])); });
+      host.appendChild(grid);
+    } else {
+      // MODE MIRING POLIGON DINAMIS (N-SISI)
+      var sides = state.miring_sides || ['4', '3', '4', '3'];
+      var labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+      
+      sides.forEach(function (sVal, idx) {
+        var lbl = 'Sisi ' + labels[idx] + ' (' + (idx + 1) + '-' + (idx === sides.length - 1 ? 1 : idx + 2) + ')';
+        grid.appendChild(mkCell('miring.sisi.' + idx, lbl));
+      });
+      
+      // Slot diagonal yang dibutuhkan (1 ke target)
+      for (var target = 3; target < sides.length; target++) {
+        grid.appendChild(mkCell('miring.diag.1-' + target, 'Diagonal 1-' + target));
+      }
       grid.appendChild(mkCell('tinggi', 'Tinggi (m)'));
       host.appendChild(grid);
 
-      var bar = document.createElement('div'); bar.className = 'miring-bar';
-      var btnPlus = document.createElement('button'); btnPlus.type = 'button'; btnPlus.className = 'miring-btn';
-      btnPlus.textContent = '+ Sisi'; btnPlus.disabled = mcfg.n >= 12;
-      btnPlus.setAttribute('aria-label', 'Tambah satu sisi dinding');
-      btnPlus.addEventListener('click', function () { ubahSisi(1); });
-      var btnMin = document.createElement('button'); btnMin.type = 'button'; btnMin.className = 'miring-btn';
-      btnMin.textContent = '− Sisi'; btnMin.disabled = mcfg.n <= 3;
-      btnMin.setAttribute('aria-label', 'Kurangi satu sisi dinding');
-      btnMin.addEventListener('click', function () { ubahSisi(-1); });
-      bar.appendChild(btnPlus); bar.appendChild(btnMin);
-      if (mcfg.n === 4) {
-        var btnTukar = document.createElement('button'); btnTukar.type = 'button'; btnTukar.className = 'miring-btn';
-        btnTukar.textContent = mcfg.alt24 ? '⇄ Pakai Diagonal 1-3' : '⇄ Pakai Diagonal 2-4';
-        btnTukar.addEventListener('click', gantiDiagonal);
-        bar.appendChild(btnTukar);
-      }
-      host.appendChild(bar);
+      // Tombol Kontrol Tambah/Kurang Sisi Poligon
+      var actRow = document.createElement('div');
+      actRow.className = 'chips-row';
+      var btnAdd = document.createElement('button');
+      btnAdd.type = 'button'; btnAdd.className = 'btn-side-ctrl';
+      btnAdd.textContent = '+ Tambah Dinding / Sudut';
+      btnAdd.addEventListener('click', function () {
+        if (sides.length < 12) {
+          sides.push('3'); state.miring_sides = sides;
+          haptic(); render();
+        }
+      });
+      actRow.appendChild(btnAdd);
 
-      var hint = document.createElement('p'); hint.className = 'hint';
-      hint.textContent = mcfg.n === 3
-        ? 'Segitiga: cukup 3 sisi, tanpa diagonal. Urutkan sisi berputar (A ke B ke C).'
-        : 'Isi ' + mcfg.n + ' sisi, lalu tembak ' + (mcfg.n === 4 ? 'diagonal' : (mcfg.n - 3) + ' diagonal')
-          + ' dari Pojok 1 sesuai panduan di kanvas. Pakai ⇄ bila jalur 1-3 terhalang kolom.';
-      host.appendChild(hint);
-    } else {
-      MODE_FIELDS[state.mode].forEach(function (f) { grid.appendChild(mkCell(f[0], f[1])); });
-      host.appendChild(grid);
+      if (sides.length > 3) {
+        var btnDel = document.createElement('button');
+        btnDel.type = 'button'; btnDel.className = 'undo';
+        btnDel.style.color = 'var(--bad)'; btnDel.textContent = '– Kurangi Sisi';
+        btnDel.addEventListener('click', function () {
+          sides.pop(); state.miring_sides = sides;
+          haptic(); render();
+        });
+        actRow.appendChild(btnDel);
+      }
+      host.appendChild(actRow);
     }
+  }
+
+  function renderLaserCard(geo) {
+    var card = $('laserGuide');
+    if (state.mode !== 'miring' || !geo.next_shot) {
+      card.style.display = 'none'; return;
+    }
+    card.style.display = 'flex';
+    card.className = 'laser-card';
+    card.innerHTML = '<div class="info">🎯 Tembakan berikutnya: <b>Pojok ' + geo.next_shot.from +
+                     ' ke ' + geo.next_shot.to + '</b></div>' +
+                     '<button type="button" class="btn-alt" id="btnBypass">Terhalang? Ganti</button>';
+    $('btnBypass').onclick = function () {
+      flash('Arahkan meteran laser ke pojok alternatif yang tidak terhalang.', 'ok');
+      haptic();
+    };
   }
 
   function renderOpen() {
@@ -861,11 +790,18 @@
   }
   function daftarNavigasi() {
     var o = parseId(state.active);
-    if (o) {   // di dalam bagian bukaan: urut seperti di layar
+    if (o) {
       return Array.prototype.map.call(document.querySelectorAll('[data-id^="open:"]'), function (e) { return e.dataset.id; });
     }
     if (state.active === 'lengkung.c' || state.active === 'lengkung.s') return ['lengkung.c', 'lengkung.s'];
-    return fieldList();
+    if (state.mode === 'keliling') return ['cur', 'tinggi'];
+    if (state.mode === 'kotak') return ['kotak.p', 'kotak.l', 'tinggi'];
+    var sides = state.miring_sides || ['4', '3', '4', '3'];
+    var res = [];
+    sides.forEach(function (_, i) { res.push('miring.sisi.' + i); });
+    for (var target = 3; target < sides.length; target++) res.push('miring.diag.1-' + target);
+    res.push('tinggi');
+    return res;
   }
   function navigasi(delta) {
     var list = daftarNavigasi(), i = list.indexOf(state.active);
@@ -915,24 +851,28 @@
     }
     var path = pts.map(function (p, i) { return (i ? 'L' : 'M') + X(p[0]) + ' ' + Y(p[1]); }).join(' ') + (geo.closed ? ' Z' : '');
     el('path', { d: path, fill: geo.closed ? 'rgba(197,168,128,0.08)' : 'none', stroke: '#c5a880', 'stroke-width': '2', 'stroke-linejoin': 'round' });
-    if (geo.nextShot && pts[geo.nextShot.from - 1] && pts[geo.nextShot.to - 1]) {
-      var qa = pts[geo.nextShot.from - 1], qb = pts[geo.nextShot.to - 1];
-      el('line', { x1: X(qa[0]), y1: Y(qa[1]), x2: X(qb[0]), y2: Y(qb[1]),
-                   stroke: '#e2ab4f', 'stroke-width': '2', 'stroke-dasharray': '5 3' });
-      el('circle', { cx: X(qa[0]), cy: Y(qa[1]), r: '5', fill: '#e2ab4f' });
-      el('circle', { cx: X(qb[0]), cy: Y(qb[1]), r: '5', fill: 'none', stroke: '#e2ab4f', 'stroke-width': '2' });
+    
+    // Render Garis Panduan Laser Berkedip (Active Next-Shot Guider)
+    if (geo.next_shot && pts.length >= 2) {
+      var pFrom = pts[geo.next_shot.from - 1] || pts[0];
+      var pTo = pts[geo.next_shot.to - 1] || [pFrom[0] + 2, pFrom[1] + 2];
+      el('line', { x1: X(pFrom[0]), y1: Y(pFrom[1]), x2: X(pTo[0]), y2: Y(pTo[1]),
+                   stroke: '#e2ab4f', 'stroke-width': '2', 'stroke-dasharray': '6 4' });
+      el('circle', { cx: X(pTo[0]), cy: Y(pTo[1]), r: '7', fill: 'rgba(226,171,79,0.25)', stroke: '#e2ab4f', 'stroke-width': '1.5' });
     }
+
     var gapmm = geo.gap * 1000;
-    if (!geo.closed && !geo.sketch && pts.length > 2) {
+    if (!geo.closed && pts.length > 2 && state.mode === 'keliling') {
       var col = gapmm > L.GAP_REJECT ? '#e0675a' : (gapmm >= L.GAP_WARN ? '#e0a33a' : '#8f7b5c');
       var last = pts[pts.length - 1];
       el('line', { x1: X(last[0]), y1: Y(last[1]), x2: X(pts[0][0]), y2: Y(pts[0][1]), stroke: col, 'stroke-width': '1.5', 'stroke-dasharray': '4 3' });
     }
     el('circle', { cx: X(pts[0][0]), cy: Y(pts[0][1]), r: '4', fill: '#121214', stroke: '#c5a880', 'stroke-width': '2' });
     var cx = xs.reduce(function (a, b) { return a + b; }, 0) / xs.length, cy = ys.reduce(function (a, b) { return a + b; }, 0) / ys.length;
-    if (geo.labels.length <= 12) {
+    if (geo.labels && geo.labels.length <= 12) {
       geo.labels.forEach(function (len, i) {
-        var a = pts[i], b = pts[(i + 1) % pts.length];
+        if (!pts[i]) return;
+        var a = pts[i], b = pts[(i + 1) % pts.length] || pts[i];
         var mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
         var dx = (mx - cx) * sc, dy = -(my - cy) * sc, n = Math.hypot(dx, dy) || 1;
         el('text', { x: (Number(X(mx)) + dx / n * 11).toFixed(1), y: (Number(Y(my)) + dy / n * 11 + 3).toFixed(1), 'text-anchor': 'middle',
@@ -940,21 +880,6 @@
         var bx = (Number(X(mx)) - dx / n * 10).toFixed(1), by = (Number(Y(my)) - dy / n * 10).toFixed(1);
         el('circle', { cx: bx, cy: by, r: '6.5', fill: '#2a2a2f', stroke: '#c5a880', 'stroke-width': '1', class: 'badge' });
         el('text', { x: bx, y: (Number(by) + 3).toFixed(1), 'text-anchor': 'middle', fill: '#eceef2', 'font-size': '8', class: 'badge-no' }, String(i + 1));
-      });
-      var cw = L.signedArea(pts.slice(0, geo.labels.length)) < 0;
-      ['pintu', 'jendela'].forEach(function (kind) {
-        (state.open[kind] || []).forEach(function (r) {
-          if (!r.d || !r.j || !/^\d+$/.test(r.j)) return;
-          var wi = Number(r.d) - 1, lebar = L.parse(r.w);
-          if (!(wi >= 0 && wi < geo.labels.length) || !(lebar > 0)) return;
-          var pa = pts[wi], pb = pts[(wi + 1) % pts.length], len = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]);
-          if (!(len > 0)) return;
-          var ux = (pb[0] - pa[0]) / len, uy = (pb[1] - pa[1]) / len, jm = Number(r.j) / 1000;
-          var dariA = cw ? jm : (len - jm - lebar);
-          if (dariA < -0.001 || dariA + lebar > len + 0.001) return;
-          el('line', { x1: X(pa[0] + ux * dariA), y1: Y(pa[1] + uy * dariA), x2: X(pa[0] + ux * (dariA + lebar)), y2: Y(pa[1] + uy * (dariA + lebar)),
-                       stroke: kind === 'pintu' ? '#f0cf8c' : '#7ab8ff', 'stroke-width': '5', class: 'marker-' + kind });
-        });
       });
     }
     host.appendChild(svg);
@@ -964,20 +889,18 @@
     var st = $('status'); st.className = 'status'; st.textContent = '';
     if (!geo.pts) return;
     var a = L.area(geo.pts);
-    if (state.mode === 'miring' && geo.nextShot) {
-      st.className = 'status warn';
-      st.textContent = '🎯 Tembakan berikutnya: ukur diagonal Pojok ' + geo.nextShot.from + ' ke Pojok ' + geo.nextShot.to + '.';
-      return;
-    }
     if (state.mode === 'keliling') {
       var mm = Math.round(geo.gap * 1000);
       if (mm > L.GAP_OPEN) { st.className = 'status'; st.textContent = 'Jalur belum kembali ke titik awal: selisih ' + geo.gap.toFixed(2).replace('.', ',') + ' m.'; }
       else if (mm < L.GAP_WARN) { st.className = 'status ok'; st.textContent = 'Celah penutup ' + mm + ' mm, diterima. Luas dasar ' + a.toFixed(2).replace('.', ',') + ' m2.'; }
       else if (mm <= L.GAP_REJECT) { st.className = 'status warn'; st.textContent = 'Celah penutup ' + mm + ' mm: dikirim dengan tanda perlu cek ulang.'; }
       else { st.className = 'status bad'; st.textContent = 'Celah penutup ' + mm + ' mm: di atas 50 mm, ditolak kecuali diberi alasan paksa.'; }
+    } else if (state.mode === 'miring' && geo.next_shot) {
+      st.className = 'status warn';
+      st.innerHTML = '🎯 <b>Tembakan berikutnya:</b> Ukur diagonal dari <b>Pojok ' +
+                     geo.next_shot.from + ' ke Pojok ' + geo.next_shot.to + '</b>';
     } else {
-      st.className = 'status ok';
-      st.textContent = 'Luas dasar ' + a.toFixed(2).replace('.', ',') + ' m2 (sebelum bukaan dan kolom).' + (geo.checkLabel ? ' ' + geo.checkLabel : '');
+      st.className = 'status ok'; st.textContent = 'Luas dasar ' + a.toFixed(2).replace('.', ',') + ' m2 (sebelum bukaan dan kolom).';
     }
   }
 
@@ -994,6 +917,7 @@
     $('dispVal').className = 'num' + (isValid(state.active, v) ? '' : ' invalid');
     var res = L.validate(state);
     planSvg(res.geo); statusText(res.geo, res);
+    renderLaserCard(res.geo);
     var go = $('go');
     go.setAttribute('aria-disabled', String(res.errors.length > 0));
     var msg = $('msg');
