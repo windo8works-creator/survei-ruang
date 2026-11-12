@@ -63,6 +63,14 @@
   .laser-card .info b { color: var(--accent); }
   .btn-alt { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 5px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 
+  /* Bar aksi dinding terpilih (tap-on-wall) */
+  .wall-bar { background: var(--raised); border: 1px solid var(--accent); border-radius: 12px; padding: 8px 10px; margin-bottom: 8px; }
+  .wall-bar-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 6px; }
+  .wall-bar-head b { color: var(--accent); }
+  .wall-bar-btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .wbtn { background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 6px 4px; font-size: 11px; color: var(--text); font-weight: 500; text-align: center; }
+  .wbtn:active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
   .cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
   .cells.two-col { grid-template-columns: repeat(2, 1fr); }
   .cell { background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; padding: 7px 10px; min-height: 52px; text-align: left; }
@@ -154,6 +162,8 @@
 
     <div class="plan"><div id="plan"></div><div class="status" id="status" aria-live="polite"></div></div>
 
+    <div id="wallBar" class="wall-bar" role="group" aria-label="Aksi dinding terpilih" style="display:none"></div>
+
     <div id="laserGuide" style="display:none"></div>
 
     <div id="fields"></div>
@@ -165,6 +175,18 @@
         <div class="kind" data-kind="jendela"></div>
         <div class="kind" data-kind="kolom"></div>
         <p class="hint">Satu baris per ukuran. Baris yang kosong diabaikan. Maksimal 6 ukuran per jenis. Posisi (opsional): berdiri di dalam ruangan, hadap dinding itu, lalu ukur dari sudut di tangan kiri. Nomor dinding ada di denah.</p>
+      </div>
+    </details>
+
+    <details id="rintangan">
+      <summary>Pulau tengah, balok plafon &amp; titik MEP</summary>
+      <div>
+        <div class="row-label">Pulau tengah: panjang, lebar (m) dan jarak X, Y (mm) dari pojok awal</div>
+        <div class="cells" data-group="pulau"></div>
+        <div class="row-label" style="margin-top:8px">Balok gantung: lebar (mm), tinggi bersih (m) dan nomor dinding</div>
+        <div class="cells" data-group="balok"></div>
+        <div class="row-label" style="margin-top:8px">Pin MEP eksisting: jenis, dinding, jarak sudut kiri (mm) dan elevasi (mm)</div>
+        <div class="oextra c4" data-group="mep"></div>
       </div>
     </details>
 
@@ -293,6 +315,20 @@
     return Math.abs(s) / 2;
   }
 
+  function wallRemainingMm(state, geo, wallNo) {
+    if (!geo || !geo.pts || !geo.labels || !geo.labels[wallNo - 1]) return 0;
+    var totalMm = Math.round(geo.labels[wallNo - 1] * 1000), usedMm = 0;
+    ['pintu', 'jendela', 'kolom'].forEach(function (k) {
+      openRows(state, k).forEach(function (r) {
+        if (Number(r.d) === wallNo && parse(r.w) > 0) {
+          var q = parseQty(r.q) || 1;
+          usedMm += Math.round(parse(r.w) * 1000) * q;
+        }
+      });
+    });
+    return Math.max(0, totalMm - usedMm);
+  }
+
   function openRows(state, kind) { return (state.open && state.open[kind]) || []; }
   function rowStatus(r, kind, ctx) {
     var cfg = KINDS[kind], c = ctx || {};
@@ -402,6 +438,28 @@
     }
     if (paksa && !PAKSA_RE.test(paksa)) errors.push('Alasan paksa: 5 sampai 120 karakter, huruf, angka, dan tanda baca sederhana.');
 
+    // Rintangan: ukuran meter boleh desimal, jarak/elevasi/lebar wajib bilangan bulat mm.
+    var pulP = g(state, 'pulau.p'), pulL = g(state, 'pulau.l');
+    var pulX = g(state, 'pulau.x'), pulY = g(state, 'pulau.y');
+    if (pulP || pulL || pulX || pulY) {
+      if (!inRange(parse(pulP), R.p)) errors.push('Pulau tengah: panjang 0,3 sampai 100 m.');
+      if (!inRange(parse(pulL), R.l)) errors.push('Pulau tengah: lebar 0,3 sampai 100 m.');
+      if (!/^\d{1,6}$/.test(pulX)) errors.push('Pulau tengah: jarak X harus bilangan bulat mm.');
+      if (!/^\d{1,6}$/.test(pulY)) errors.push('Pulau tengah: jarak Y harus bilangan bulat mm.');
+    }
+    var balW = g(state, 'balok.w'), balH = parse(g(state, 'balok.h')), balD = g(state, 'balok.d');
+    if (balW || balD) {
+      if (!/^\d{2,4}$/.test(balW)) errors.push('Balok: lebar 10 sampai 9999 mm (bilangan bulat).');
+      if (!inRange(balH, [0.3, 6])) errors.push('Balok: tinggi bersih 0,3 sampai 6 m.');
+      if (!/^\d{1,2}$/.test(balD)) errors.push('Balok: nomor dinding belum diisi.');
+    }
+    var mepD = g(state, 'mep.d'), mepJ = g(state, 'mep.j'), mepE = g(state, 'mep.e');
+    if (mepD || mepJ) {
+      if (!/^\d{1,2}$/.test(mepD)) errors.push('MEP: nomor dinding belum diisi.');
+      if (!/^\d{1,6}$/.test(mepJ)) errors.push('MEP: jarak harus bilangan bulat mm.');
+      if (mepE && !/^\d{1,5}$/.test(mepE)) errors.push('MEP: elevasi harus bilangan bulat mm.');
+    }
+
     var payload = null;
     if (!errors.length) {
       payload = buildPayload(state);
@@ -454,6 +512,16 @@
       }
     }
     Object.keys(KINDS).forEach(function (k) { var v = bukaanList(state, k); if (v.length) o[k] = v; });
+
+    // Rintangan ruang: pulau tengah, balok gantung, titik MEP.
+    var pp = parse(g(state, 'pulau.p')), pl = parse(g(state, 'pulau.l')),
+        px = g(state, 'pulau.x'), py = g(state, 'pulau.y');
+    if (pp > 0 && pl > 0 && px && py) o.pulau = [fmt(pp) + 'x' + fmt(pl) + '@' + px + ',' + py];
+    var bw = g(state, 'balok.w'), bh = parse(g(state, 'balok.h')), bd = g(state, 'balok.d');
+    if (bw && bh > 0 && bd) o.balok = [bw + 'x' + fmt(bh) + '@D' + bd];
+    var md = g(state, 'mep.d'), mj = g(state, 'mep.j'), me = g(state, 'mep.e');
+    if (md && mj) o.mep = [(state.mep_type || 'KK') + '@D' + md + ':dist=' + mj + (me ? ':elev=' + me : '')];
+
     if (m === 'kotak' && g(state, 'lengkung.c')) o.lengkung = fmt(parse(g(state, 'lengkung.c'))) + ',' + fmt(parse(g(state, 'lengkung.s')));
     var paksa = (state.paksa || '').trim();
     if (paksa) o.paksa = paksa;
@@ -461,6 +529,7 @@
   }
 
   root.SurveiLogic = { R: R, KINDS: KINDS, MAX_OPEN: MAX_OPEN, parse: parse, geometry: geometry, area: area, signedArea: signedArea,
+                       wallRemainingMm: wallRemainingMm,
                        validate: validate, buildPayload: buildPayload, fmt: fmt,
                        GAP_WARN: GAP_WARN, GAP_REJECT: GAP_REJECT, GAP_OPEN: GAP_OPEN };
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -501,6 +570,8 @@
                                miring_sides: ['4', '3', '4', '3'],
                                open: { pintu: [newRow()], jendela: [newRow()], kolom: [newRow()] } };
   state.active = defaultActive(state.mode);
+  state.selectedWall = state.selectedWall || 1;
+  state.mep_type = state.mep_type || 'KK';
   var fresh = true, padMode = null;
 
   function saveDraft() {
@@ -558,7 +629,11 @@
     }
     var LABELS = {
       tinggi: 'Tinggi plafon (m)', 'kotak.p': 'Panjang (m)', 'kotak.l': 'Lebar (m)',
-      cur: 'Panjang sisi berikutnya (m)', 'lengkung.c': 'Lengkung: bentang (m)', 'lengkung.s': 'Lengkung: tinggi perut (m)'
+      cur: 'Panjang sisi berikutnya (m)', 'lengkung.c': 'Lengkung: bentang (m)', 'lengkung.s': 'Lengkung: tinggi perut (m)',
+      'pulau.p': 'Pulau: panjang (m)', 'pulau.l': 'Pulau: lebar (m)',
+      'pulau.x': 'Pulau: jarak X (mm)', 'pulau.y': 'Pulau: jarak Y (mm)',
+      'balok.w': 'Balok: lebar (mm)', 'balok.h': 'Balok: tinggi bersih (m)', 'balok.d': 'Balok: nomor dinding',
+      'mep.d': 'MEP: nomor dinding', 'mep.j': 'MEP: jarak sudut kiri (mm)', 'mep.e': 'MEP: elevasi (mm)'
     };
     return LABELS[id] || id;
   }
@@ -581,6 +656,23 @@
     }
     if (id.indexOf('miring.diag.') === 0) {
       n = L.parse(v); return isFinite(n) && n >= R.diag[0] && n <= R.diag[1];
+    }
+    if (id.indexOf('pulau.') === 0) {
+      if (id === 'pulau.x' || id === 'pulau.y') return /^\d{1,6}$/.test(v);
+      n = L.parse(v);
+      var rp = id === 'pulau.p' ? R.p : R.l;
+      return isFinite(n) && n >= rp[0] && n <= rp[1];
+    }
+    if (id.indexOf('balok.') === 0) {
+      if (id === 'balok.w') return /^\d{2,4}$/.test(v);
+      if (id === 'balok.d') return /^\d{1,2}$/.test(v) && Number(v) >= 1 && Number(v) <= 60;
+      n = L.parse(v);
+      return isFinite(n) && n >= 0.3 && n <= 6;
+    }
+    if (id.indexOf('mep.') === 0) {
+      if (id === 'mep.d') return /^\d{1,2}$/.test(v) && Number(v) >= 1 && Number(v) <= 60;
+      if (id === 'mep.j') return /^\d{1,6}$/.test(v) && Number(v) <= 100000;
+      return /^\d{1,5}$/.test(v) && Number(v) <= 15000;
     }
     var map = { tinggi: R.tinggi, 'kotak.p': R.p, 'kotak.l': R.l, cur: R.seg, 'lengkung.c': R.chord, 'lengkung.s': R.sagitta };
     n = L.parse(v);
@@ -758,6 +850,73 @@
   function renderGroups() {
     var el = document.querySelector('[data-group="lengkung"]'); el.textContent = '';
     el.appendChild(mkCell('lengkung.c', 'Bentang')); el.appendChild(mkCell('lengkung.s', 'Tinggi perut'));
+
+    var elP = document.querySelector('[data-group="pulau"]'); elP.textContent = '';
+    elP.appendChild(mkCell('pulau.p', 'Panjang (m)')); elP.appendChild(mkCell('pulau.l', 'Lebar (m)'));
+    elP.appendChild(mkCell('pulau.x', 'Jarak X (mm)')); elP.appendChild(mkCell('pulau.y', 'Jarak Y (mm)'));
+
+    var elB = document.querySelector('[data-group="balok"]'); elB.textContent = '';
+    elB.appendChild(mkCell('balok.w', 'Lebar (mm)')); elB.appendChild(mkCell('balok.h', 'T.bersih (m)'));
+    elB.appendChild(mkCell('balok.d', 'Dinding'));
+
+    var elM = document.querySelector('[data-group="mep"]'); elM.textContent = '';
+    var btnType = document.createElement('button'); btnType.type = 'button'; btnType.className = 'cell toggle';
+    var smT = document.createElement('small'); smT.textContent = 'Jenis';
+    var bT = document.createElement('b'); bT.className = 'num'; bT.textContent = state.mep_type;
+    btnType.appendChild(smT); btnType.appendChild(bT);
+    var TYPES = ['KK', 'SK', 'KRAN', 'FD', 'PANEL', 'AC'];
+    btnType.addEventListener('click', function () {
+      state.mep_type = TYPES[(TYPES.indexOf(state.mep_type) + 1) % TYPES.length];
+      haptic(); render();
+    });
+    elM.appendChild(btnType);
+    elM.appendChild(mkCell('mep.d', 'Dinding')); elM.appendChild(mkCell('mep.j', 'Jarak (mm)'));
+    elM.appendChild(mkCell('mep.e', 'Elev (mm)'));
+  }
+
+  function renderWallBar(geo) {
+    var bar = $('wallBar');
+    if (!geo.pts || !geo.labels || !geo.labels.length) { bar.style.display = 'none'; return; }
+    var wNo = Math.min(state.selectedWall || 1, geo.labels.length);
+    state.selectedWall = wNo;
+    var wLen = geo.labels[wNo - 1] || 0, remMm = L.wallRemainingMm(state, geo, wNo);
+    bar.style.display = 'block'; bar.textContent = '';
+    var head = document.createElement('div'); head.className = 'wall-bar-head';
+    var s1 = document.createElement('span');
+    s1.innerHTML = '\uD83C\uDFAF <b>Dinding D' + wNo + '</b> (' + wLen.toFixed(2).replace('.', ',') + ' m)';
+    var s2 = document.createElement('span');
+    s2.innerHTML = 'Sisa bebas: <b>' + (remMm / 1000).toFixed(2).replace('.', ',') + ' m</b>';
+    head.appendChild(s1); head.appendChild(s2); bar.appendChild(head);
+    var btns = document.createElement('div'); btns.className = 'wall-bar-btns';
+    [['pintu', '+ Pintu'], ['jendela', '+ Jendela'], ['kolom', '+ Kolom'], ['mep', '+ Pin MEP']].forEach(function (x) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'wbtn';
+      b.textContent = x[1] + ' D' + wNo;
+      b.addEventListener('click', function () { aksiDinding(x[0], wNo); });
+      btns.appendChild(b);
+    });
+    bar.appendChild(btns);
+  }
+
+  function aksiDinding(act, wNo) {
+    haptic();
+    if (act === 'mep') {
+      $('rintangan').open = true;
+      state.vals['mep.d'] = String(wNo);
+      select('mep.j');
+      return;
+    }
+    $('bukaan').open = true;
+    var rows = state.open[act], idx = -1, i;
+    for (i = 0; i < rows.length; i++) { if (!rows[i].w && !rows[i].h) { idx = i; break; } }
+    if (idx < 0) {
+      if (rows.length < L.MAX_OPEN) { rows.push(newRow()); idx = rows.length - 1; }
+      else idx = rows.length - 1;
+    }
+    var row = rows[idx];
+    row.q = '1'; row.d = String(wNo); row.x = true;
+    if (act === 'pintu' && !row.h) row.h = '2.1';
+    if (act === 'jendela' && !row.h) row.h = '1.5';
+    select('open:' + act + ':' + idx + ':w');
   }
 
   function buildPad() {
@@ -794,6 +953,9 @@
       return Array.prototype.map.call(document.querySelectorAll('[data-id^="open:"]'), function (e) { return e.dataset.id; });
     }
     if (state.active === 'lengkung.c' || state.active === 'lengkung.s') return ['lengkung.c', 'lengkung.s'];
+    if (state.active.indexOf('pulau.') === 0) return ['pulau.p', 'pulau.l', 'pulau.x', 'pulau.y'];
+    if (state.active.indexOf('balok.') === 0) return ['balok.w', 'balok.h', 'balok.d'];
+    if (state.active.indexOf('mep.') === 0) return ['mep.d', 'mep.j', 'mep.e'];
     if (state.mode === 'keliling') return ['cur', 'tinggi'];
     if (state.mode === 'kotak') return ['kotak.p', 'kotak.l', 'tinggi'];
     var sides = state.miring_sides || ['4', '3', '4', '3'];
@@ -811,7 +973,8 @@
 
   function press(k) {
     var id = state.active, s = getVal(id), o = parseId(id);
-    var intLen = o ? { q: 2, d: 2, j: 6, s: 5 }[o.f] : undefined, isInt = intLen !== undefined;
+    var INTLEN = { 'pulau.x': 6, 'pulau.y': 6, 'balok.w': 4, 'balok.d': 2, 'mep.d': 2, 'mep.j': 6, 'mep.e': 5 };
+    var intLen = o ? { q: 2, d: 2, j: 6, s: 5 }[o.f] : INTLEN[id], isInt = intLen !== undefined;
     if (fresh) { if (k !== 'back') s = ''; fresh = false; }
     if (k === 'back') s = s.slice(0, -1);
     else if (k === '.') { if (isInt) return; if (!s) s = '0.'; else if (s.indexOf('.') < 0) s += '.'; else return; }
@@ -918,6 +1081,7 @@
     var res = L.validate(state);
     planSvg(res.geo); statusText(res.geo, res);
     renderLaserCard(res.geo);
+    renderWallBar(res.geo);
     var go = $('go');
     go.setAttribute('aria-disabled', String(res.errors.length > 0));
     var msg = $('msg');
